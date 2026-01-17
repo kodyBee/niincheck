@@ -251,7 +251,7 @@ export default function DashboardPage() {
           {searchQuery && (
             <div>
               <h3 className="text-2xl font-semibold mb-4">
-                Results for <span className="text-primary">"{searchQuery}"</span>
+                Results for <span className="text-primary">&quot;{searchQuery}&quot;</span>
               </h3>
             </div>
           )}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/db';
+import type Stripe from 'stripe';
 
 export async function GET(request: Request) {
   try {
@@ -43,8 +44,8 @@ export async function GET(request: Request) {
       };
 
       // Only add subscription_end_date if current_period_end exists
-      if (subscription.current_period_end) {
-        updateData.subscription_end_date = new Date(subscription.current_period_end * 1000).toISOString();
+      if ('current_period_end' in subscription && subscription.current_period_end) {
+        updateData.subscription_end_date = new Date((subscription.current_period_end as number) * 1000).toISOString();
       }
 
       await supabaseAdmin
