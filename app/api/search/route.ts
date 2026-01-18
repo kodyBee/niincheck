@@ -32,19 +32,17 @@ export async function GET(request: Request) {
     // Optimize search: use prefix matching instead of wildcard for better performance
     const searchPattern = `${query}%`;
     
-    // Build the base query
+    // Build the base query - limit to 50 results before joining
     let searchQuery = supabaseAdmin
       .from('pull2')
       .select('niin, itemName, commonName, fsc, characteristics, publicationDate', { count: 'exact' })
-      .or(`niin.ilike.${searchPattern},itemName.ilike.${searchPattern},commonName.ilike.${searchPattern},fsc.ilike.${searchPattern}`);
+      .or(`niin.ilike.${searchPattern},itemName.ilike.${searchPattern},commonName.ilike.${searchPattern},fsc.ilike.${searchPattern}`)
+      .limit(50); // Limit BEFORE joins to reduce data processed
 
     // Apply FSC filter if provided
     if (fscFilter) {
       searchQuery = searchQuery.eq('fsc', fscFilter);
     }
-
-    // Apply pagination
-    searchQuery = searchQuery.range(offset, offset + limit - 1);
 
     const { data: pull2Data, error, count } = await searchQuery;
 
@@ -63,20 +61,31 @@ export async function GET(request: Request) {
     // Get unique NIINs to lookup related data
     const niins = [...new Set(pull2Data.map(item => item.niin).filter(Boolean))];
     
-    // Fetch all related data in parallel
+    // Fetch only the most critical related data to avoid timeout
+    // Fetch in smaller batches if needed
     const [
       { data: aacsData },
-      { data: pricesData },
-      { data: weightsData },
-      { data: descriptionsData },
-      { data: namesData }
+      { data: pricesData }
     ] = await Promise.all([
       supabaseAdmin.from('aacs').select('niin, aac').in('niin', niins),
-      supabaseAdmin.from('prices').select('niin, unitPrice, ui').in('niin', niins),
-      supabaseAdmin.from('weights').select('niin, dss_weight, dss_cube, publication_date').in('niin', niins),
-      supabaseAdmin.from('descriptions').select('niin, requirementsStatement, clearTextReply').in('niin', niins),
-      supabaseAdmin.from('names').select('niin, item_name').in('niin', niins)
+      supabaseAdmin.from('prices').select('niin, unitPrice, ui').in('niin', niins)
     ]);
+
+    // Optionally fetch additional data only if result set is small
+    let weightsData = null;
+    let descriptionsData = null;
+    let namesData = null;
+    
+    if (niins.length <= 20) {
+      const [weights, descriptions, names] = await Promise.all([
+        supabaseAdmin.from('weights').select('niin, dss_weight, dss_cube, publication_date').in('niin', niins),
+        supabaseAdmin.from('descriptions').select('niin, requirementsStatement, clearTextReply').in('niin', niins),
+        supabaseAdmin.from('names').select('niin, item_name').in('niin', niins)
+      ]);
+      weightsData = weights.data;
+      descriptionsData = descriptions.data;
+      namesData = names.data;
+    }
 
     // Create maps for quick lookup
     const aacMap = new Map<string, string>();
