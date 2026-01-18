@@ -10,6 +10,10 @@ function getSupabaseClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!url || !key) {
+    console.error('[Auth] Missing Supabase environment variables', {
+      hasUrl: !!url,
+      hasKey: !!key
+    });
     throw new Error('Missing Supabase environment variables');
   }
   
@@ -21,41 +25,61 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
       async authorize(credentials) {
-        const { email, password } = credentials as {
-          email: string;
-          password: string;
-        };
+        try {
+          const { email, password } = credentials as {
+            email: string;
+            password: string;
+          };
 
-        if (!email || !password) {
-          throw new Error('Please provide email and password');
+          if (!email || !password) {
+            console.error('[Auth] Missing email or password');
+            throw new Error('Please provide email and password');
+          }
+
+          // Create Supabase client on-demand
+          const supabase = getSupabaseClient();
+          
+          // Query the users table directly
+          const { data: user, error } = await supabase
+            .from('users')
+            .select('id, email, password_hash, stripe_subscription_status')
+            .eq('email', email)
+            .single();
+
+          if (error) {
+            console.error('[Auth] Database error:', error.message);
+            throw new Error('Invalid email or password');
+          }
+
+          if (!user) {
+            console.error('[Auth] User not found:', email);
+            throw new Error('Invalid email or password');
+          }
+
+          // Check if password_hash exists
+          if (!user.password_hash) {
+            console.error('[Auth] No password hash found for user:', email);
+            throw new Error('Invalid email or password');
+          }
+
+          // Verify password
+          const isValid = await bcrypt.compare(password, user.password_hash);
+          
+          if (!isValid) {
+            console.error('[Auth] Password verification failed for:', email);
+            throw new Error('Invalid email or password');
+          }
+
+          console.log('[Auth] Login successful for:', email);
+          return {
+            id: user.id,
+            email: user.email,
+            isSubscribed: user.stripe_subscription_status === 'active',
+          };
+        } catch (error) {
+          console.error('[Auth] Authorization error:', error);
+          throw error;
         }
-
-        // Create Supabase client on-demand
-        const supabase = getSupabaseClient();
-        
-        // Query the users table directly
-        const { data: user, error } = await supabase
-          .from('users')
-          .select('id, email, password_hash, stripe_subscription_status')
-          .eq('email', email)
-          .single();
-
-        if (error || !user) {
-          throw new Error('Invalid email or password');
-        }
-
-        // Verify password
-        const isValid = await bcrypt.compare(password, user.password_hash);
-        
-        if (!isValid) {
-          throw new Error('Invalid email or password');
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          isSubscribed: user.stripe_subscription_status === 'active',
-        };
       },
     }),
   ],
