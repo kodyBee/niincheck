@@ -42,7 +42,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // Query the users table directly
           const { data: user, error } = await supabase
             .from('users')
-            .select('id, email, password_hash, stripe_subscription_status')
+            .select('id, email, password_hash')
             .eq('email', email)
             .single();
 
@@ -74,7 +74,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return {
             id: user.id,
             email: user.email,
-            isSubscribed: user.stripe_subscription_status === 'active',
           };
         } catch (error) {
           console.error('[Auth] Authorization error:', error);
@@ -90,26 +89,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.isSubscribed = user.isSubscribed;
-      } else if (token.id) {
-        // Refresh subscription status on each session check
-        const supabase = getSupabaseClient();
-        const { data } = await supabase
-          .from('users')
-          .select('stripe_subscription_status')
-          .eq('id', token.id)
-          .single();
-        
-        if (data) {
-          token.isSubscribed = data.stripe_subscription_status === 'active';
-        }
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.isSubscribed = token.isSubscribed as boolean;
       }
       return session;
     },
