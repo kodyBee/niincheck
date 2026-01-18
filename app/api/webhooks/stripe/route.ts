@@ -37,10 +37,9 @@ export async function POST(request: Request) {
           .from('users')
           .update({
             stripe_customer_id: session.customer,
-            subscription_id: session.subscription as string,
-            subscription_status: 'active',
-            price_id: session.metadata?.priceId,
-            updated_at: new Date().toISOString(),
+            stripe_subscription_id: session.subscription as string,
+            stripe_subscription_status: 'active',
+            stripe_price_id: session.metadata?.priceId,
           })
           .eq('id', userId);
       }
@@ -54,13 +53,9 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from('users')
         .update({
-          subscription_status: subscription.status,
-          subscription_end_date: subscription.current_period_end 
-            ? new Date(subscription.current_period_end * 1000).toISOString()
-            : null,
-          updated_at: new Date().toISOString(),
+          stripe_subscription_status: subscription.status,
         })
-        .eq('subscription_id', subscription.id);
+        .eq('stripe_subscription_id', subscription.id);
       break;
     }
 
