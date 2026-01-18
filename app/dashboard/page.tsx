@@ -69,7 +69,7 @@ export default function DashboardPage() {
     }
   }, [verifyingSubscription]);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = async (query: string, filters: any = {}) => {
     setSearchQuery(query);
     
     if (!query.trim()) {
@@ -94,8 +94,15 @@ export default function DashboardPage() {
     setSearchLoading(true);
     
     try {
+      // Build query string with filters
+      const params = new URLSearchParams({ q: query });
+      if (filters.fsc) params.append('fsc', filters.fsc);
+      if (filters.classIX) params.append('classIX', filters.classIX);
+      if (filters.minPrice) params.append('minPrice', filters.minPrice);
+      if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
+      
       // Call API route that uses server-side Supabase client
-      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      const response = await fetch(`/api/search?${params.toString()}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -109,6 +116,15 @@ export default function DashboardPage() {
         setResults(data.results || []);
         if (data.results && data.results.length === 0) {
           console.log('No results found for query:', query);
+          toast.info("No Results", {
+            description: `No results found for "${query}" with the applied filters.`,
+            duration: 3000,
+          });
+        } else {
+          toast.success("Search Complete", {
+            description: `Found ${data.results.length} result(s)${data.total > data.results.length ? ` (${data.total} total)` : ''}.`,
+            duration: 2000,
+          });
         }
       }
     } catch (err) {

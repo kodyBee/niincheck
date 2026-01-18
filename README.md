@@ -2,13 +2,26 @@
 
 A modern, subscription-based web application for accessing a National Stock Number (NSN) database built with Next.js 14, NextAuth, Supabase (PostgreSQL), and Stripe.
 
+## ✨ Latest Features (v2.0)
+
+- 🔍 **Enhanced Search** - Multi-table data enrichment with prices, weights, and detailed descriptions
+- 🎯 **Advanced Filtering** - Filter by FSC, Class IX, and price range
+- 📄 **Pagination** - Efficiently browse large result sets
+- 📊 **Detailed NSN View** - Comprehensive modal with all available data
+- ⚡ **Performance Optimized** - Parallel queries and intelligent caching
+
+> 📖 See [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for a quick guide to new features  
+> 📖 See [SEARCH_FEATURES.md](SEARCH_FEATURES.md) for technical documentation
+
 ## Features
 
 - 🔐 **Authentication** - Secure user authentication with NextAuth (Auth.js)
 - 💳 **Subscriptions** - Monthly subscription plans with Stripe
-- 🔍 **Search** - Fast and powerful NSN database search
+- 🔍 **Powerful Search** - Search across 6 database tables with rich data
+- 🎛️ **Smart Filters** - Filter by FSC, Class IX status, and price range
+- 📋 **Detailed Views** - Complete NSN specifications in interactive modals
 - 🎨 **Modern UI** - Beautiful, responsive design with Tailwind CSS
-- 📊 **Dashboard** - User dashboard with search functionality
+- 📊 **Dashboard** - User dashboard with advanced search functionality
 - 🔒 **Protected Routes** - Middleware-based authentication
 
 ## Tech Stack
