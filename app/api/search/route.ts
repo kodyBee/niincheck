@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     // Search pull2 table
     const { data: pull2Data, error } = await supabaseAdmin
       .from('pull2')
-      .select('niin, itemName, commonName, fsc, characteristics, ric')
+      .select('niin, itemName, commonName, fsc, characteristics')
       .or(`niin.ilike.${searchPattern},itemName.ilike.${searchPattern},commonName.ilike.${searchPattern},fsc.ilike.${searchPattern}`)
       .limit(50);
 
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
         nsn: item.niin || '', // Using NIIN as NSN equivalent
         name: item.itemName || '',
         description: item.commonName || '',
-        turnInPart: item.ric || '', // RIC is typically the turn-in part indicator
+        turnInPart: '', // RIC column doesn't exist in pull2 table
         classIX: isClassIX,
         fsc: item.fsc || '',
         niin: item.niin || ''
