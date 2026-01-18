@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/db';
 export async function GET(request: Request) {
   try {
     const session = await auth();
-    
+
     if (!session?.user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -29,27 +29,30 @@ export async function GET(request: Request) {
     // Calculate offset for pagination
     const offset = (page - 1) * limit;
 
-    // ULTRA-LEAN search for 5+ GB tables without indexes
-    let searchQuery = supabaseAdmin
+    // Optimized search query utilizing DB indexes and Joins
+    // Join pull2 -> items -> (prices, aacs)
+    let dbQuery = supabaseAdmin
       .from('pull2')
-      .select('niin, fsc', { count: 'exact' }) // Minimal columns only
-      .limit(20); // Reduced to 20 for speed
+      .select('*, items!inner(prices(unitPrice), aacs(aac))', { count: 'exact' })
+      .range(offset, offset + limit - 1);
 
-    // Apply search filter - simple matching only
-    if (/^\d+$/.test(query)) {
-      // Numeric search: prefix match on NIIN
-      searchQuery = searchQuery.ilike('niin', `${query}%`);
+    // Apply smart search filters
+    const cleanQuery = query.trim().toUpperCase();
+
+    if (/^[\d-]+$/.test(cleanQuery)) {
+      const cleanNiin = cleanQuery.replace(/-/g, '');
+      dbQuery = dbQuery.or(`niin.ilike.${cleanNiin}%,fsc.eq.${cleanQuery}`);
     } else {
-      // Text search: exact FSC match only (fastest option)
-      searchQuery = searchQuery.eq('fsc', query.toUpperCase());
+      // Relies on pg_trgm GIN index
+      dbQuery = dbQuery.or(`itemName.ilike.%${cleanQuery}%,fsc.eq.${cleanQuery}`);
     }
 
-    // Apply FSC filter if provided
+    // Apply FSC filter
     if (fscFilter) {
-      searchQuery = searchQuery.eq('fsc', fscFilter);
+      dbQuery = dbQuery.eq('fsc', fscFilter);
     }
 
-    const { data: pull2Data, error, count } = await searchQuery;
+    const { data: pull2Data, error, count } = await dbQuery;
 
     if (error) {
       console.error('Search error:', error);
@@ -63,57 +66,63 @@ export async function GET(request: Request) {
       return NextResponse.json({ results: [], total: 0, page, limit });
     }
 
-    // Get unique NIINs to lookup related data
-    const niins = [...new Set(pull2Data.map(item => item.niin).filter(Boolean))];
-    
-    // Skip ALL joins to prevent timeout - minimal data only
-    const aacsData = null;
-    const pricesData = null;
-    let weightsData = null;
-    let descriptionsData = null;
-    let namesData = null;
-
-    // Create maps for quick lookup
-    const aacMap = new Map<string, string>();
-    if (aacsData) {
-      aacsData.forEach(item => {
-        if (item.niin && item.aac) {
-          aacMap.set(item.niin, item.aac);
-        }
-      });
-    }
-
-    const priceMap = new Map<string, { unitPrice: string; ui: string }>();
-    if (pricesData) {
-      pricesData.forEach(item => {
-        if (item.niin) {
-          priceMap.set(item.niin, { unitPrice: item.unitPrice || '', ui: item.ui || '' });
-        }
-      });
-    }
-
-    conTransform data to match expected format - MINIMAL DATA ONLY
+    // Transform data
     let transformedData = pull2Data.map((item: any) => {
+      // items is likely a single object because pull2.niin -> items.niin is Many-to-One
+      const relatedItems = item.items;
+
+      // prices and aacs are arrays within relatedItems
+      const prices = relatedItems?.prices || [];
+      const aacs = relatedItems?.aacs || [];
+
+      // Get first matching price/aac if available
+      const priceObj = prices.find((p: any) => p.unitPrice) || {};
+      const aacObj = aacs.find((a: any) => a.aac) || {};
+
+      const aac = aacObj.aac || '';
+      const isClassIX = ['D', 'V', 'Z'].includes(aac.toUpperCase());
+      const unitPrice = priceObj.unitPrice;
+
       return {
         nsn: item.niin || '',
-        name: null,
+        name: item.itemName || '',
         description: null,
         turnInPart: '',
-        classIX: null,
-        aac: null,
+        classIX: isClassIX,
+        aac: aac,
         fsc: item.fsc || '',
         niin: item.niin || '',
         characteristics: null,
         publicationDate: null,
-        // All enriched data null - use detail endpoint
-        unitPrice: null,
+        // Essential data
+        unitPrice: unitPrice || null,
         unitOfIssue: null,
+        // Other data null - use detail endpoint
         weight: null,
         cube: null,
         weightPubDate: null,
         requirementsStatement: null,
         clearTextReply: null,
         alternateNames: []
+      };
+    });
+
+    // Apply Class IX filter if provided
+    if (classIXFilter !== null) {
+      const filterValue = classIXFilter === 'true';
+      transformedData = transformedData.filter(item => item.classIX === filterValue);
+    }
+
+    // Apply price range filter if provided
+    if (minPrice || maxPrice) {
+      transformedData = transformedData.filter(item => {
+        if (!item.unitPrice) return false;
+        const price = parseFloat(item.unitPrice);
+        if (isNaN(price)) return false;
+        if (minPrice && price < parseFloat(minPrice)) return false;
+        if (maxPrice && price > parseFloat(maxPrice)) return false;
+        return true;
+      });
     }
 
     return NextResponse.json({
@@ -131,3 +140,4 @@ export async function GET(request: Request) {
     );
   }
 }
+
