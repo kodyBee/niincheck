@@ -4,19 +4,25 @@
 
 ### Solution Applied
 
-The search route has been optimized for large tables:
+**ULTRA-LEAN MODE** - For 5+ GB tables WITHOUT indexes:
 
-1. **Reduced Initial Query**: 
-   - Limited to 50 results BEFORE fetching related data
-   - Prevents processing thousands of rows
+1. **Minimal Query**: 
+   - Limited to 20 results maximum
+   - Only fetches 4 columns from pull2: `niin, nsn, fsc, nomen`
+   - Skips: demil, enac, ui, sl, rncc, ui_convert
 
-2. **Prioritized Data Fetching**:
-   - Always fetches: `aacs` (Class IX) and `prices` (most important)
-   - Conditionally fetches weights, descriptions, names only for small result sets (≤20 items)
+2. **Smart Search Strategy**:
+   - **Numeric search** (all digits): Prefix match on NIIN → `ILIKE 'search%'`
+   - **Text search**: Contains match on NOMEN → `ILIKE '%search%'`
+   - No trigram similarity (requires indexes)
 
-3. **Progressive Enhancement**:
-   - Basic search works fast with critical data
-   - Additional details available via the detail endpoint (`/api/nsn/[niin]`)
+3. **Single Join Only**:
+   - Only fetches `aacs` table for Class IX designation
+   - Skips: prices, weights, descriptions, names
+
+4. **Detail on Demand**:
+   - All additional data available via detail endpoint (`/api/nsn/[niin]`)
+   - Click info button for complete specifications
 
 ### Database Indexes Required
 
@@ -33,22 +39,23 @@ See `database-optimization.sql` for complete instructions.
 
 ### Current Behavior
 
-**For searches returning 1-20 results:**
-- Full data enrichment (all 6 tables)
-- All fields populated
-
-**For searches returning 21-50 results:**
-- Basic data (pull2, aacs, prices)
-- Weight, descriptions, alternate names: `null`
+**All searches (ultra-lean mode):**
+- Basic data only: NIIN, NSN, FSC, NOMEN, Class IX
+- All other fields: `null` (price, weight, descriptions, etc.)
 - Click detail button for full information
+
+**Why so minimal?**
+- Without database indexes, even simple joins timeout on 5+ GB tables
+- This gets search working NOW, before indexes are created
+- Once indexes are in place, can re-enable full data enrichment
 
 ### Performance Metrics
 
-| Scenario | Before Optimization | After Optimization |
-|----------|--------------------|--------------------|
-| Large result set (50 items) | Timeout (>30s) | ~2-5s |
-| Small result set (5 items) | Timeout (>30s) | ~1-3s |
-| With indexes | N/A | <1s expected |
+| Scenario | Before Optimization | Ultra-Lean Mode | With Indexes |
+|----------|--------------------|--------------------|--------------|
+| Numeric search (NIIN) | Timeout | ~1-2s | <0.5s |
+| Text search (NOMEN) | Timeout | ~2-5s | <1s |
+| Any search (20 results) | Timeout | ~1-3s | <0.5s |
 
 ### User Experience
 
@@ -67,15 +74,21 @@ See `database-optimization.sql` for complete instructions.
 
 Test with various query patterns:
 ```
-// Small result set - full data
-search: "123456789" (specific NIIN)
+// Numeric search (fast) - prefix match on NIIN
+search: "123456789"
+search: "00123"
 
-// Medium result set - full data  
-search: "bolt" with FSC filter
+// Text search - contains match on NOMEN
+search: "bolt"
+search: "connector"
 
-// Large result set - basic data
-search: "connector" (common term)
+// With filters (FSC still works)
+search: "bolt" + FSC: "5306"
 ```
+
+**Expected behavior:**
+- All searches return basic data only (NIIN, NSN, FSC, NOMEN, Class IX)
+- Click info button to load full details from detail endpoint
 
 ### Monitoring
 

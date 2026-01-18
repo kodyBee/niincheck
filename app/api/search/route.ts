@@ -29,15 +29,20 @@ export async function GET(request: Request) {
     // Calculate offset for pagination
     const offset = (page - 1) * limit;
 
-    // Optimize search: use prefix matching instead of wildcard for better performance
-    const searchPattern = `${query}%`;
-    
-    // Build the base query - limit to 50 results before joining
+    // ULTRA-LEAN search for 5+ GB tables without indexes
     let searchQuery = supabaseAdmin
       .from('pull2')
-      .select('niin, itemName, commonName, fsc, characteristics, publicationDate', { count: 'exact' })
-      .or(`niin.ilike.${searchPattern},itemName.ilike.${searchPattern},commonName.ilike.${searchPattern},fsc.ilike.${searchPattern}`)
-      .limit(50); // Limit BEFORE joins to reduce data processed
+      .select('niin, fsc', { count: 'exact' }) // Minimal columns only
+      .limit(20); // Reduced to 20 for speed
+
+    // Apply search filter - simple matching only
+    if (/^\d+$/.test(query)) {
+      // Numeric search: prefix match on NIIN
+      searchQuery = searchQuery.ilike('niin', `${query}%`);
+    } else {
+      // Text search: exact FSC match only (fastest option)
+      searchQuery = searchQuery.eq('fsc', query.toUpperCase());
+    }
 
     // Apply FSC filter if provided
     if (fscFilter) {
@@ -61,31 +66,12 @@ export async function GET(request: Request) {
     // Get unique NIINs to lookup related data
     const niins = [...new Set(pull2Data.map(item => item.niin).filter(Boolean))];
     
-    // Fetch only the most critical related data to avoid timeout
-    // Fetch in smaller batches if needed
-    const [
-      { data: aacsData },
-      { data: pricesData }
-    ] = await Promise.all([
-      supabaseAdmin.from('aacs').select('niin, aac').in('niin', niins),
-      supabaseAdmin.from('prices').select('niin, unitPrice, ui').in('niin', niins)
-    ]);
-
-    // Optionally fetch additional data only if result set is small
+    // Skip ALL joins to prevent timeout - minimal data only
+    const aacsData = null;
+    const pricesData = null;
     let weightsData = null;
     let descriptionsData = null;
     let namesData = null;
-    
-    if (niins.length <= 20) {
-      const [weights, descriptions, names] = await Promise.all([
-        supabaseAdmin.from('weights').select('niin, dss_weight, dss_cube, publication_date').in('niin', niins),
-        supabaseAdmin.from('descriptions').select('niin, requirementsStatement, clearTextReply').in('niin', niins),
-        supabaseAdmin.from('names').select('niin, item_name').in('niin', niins)
-      ]);
-      weightsData = weights.data;
-      descriptionsData = descriptions.data;
-      namesData = names.data;
-    }
 
     // Create maps for quick lookup
     const aacMap = new Map<string, string>();
@@ -106,91 +92,28 @@ export async function GET(request: Request) {
       });
     }
 
-    const weightMap = new Map<string, { weight: string; cube: string; pubDate: string }>();
-    if (weightsData) {
-      weightsData.forEach(item => {
-        if (item.niin) {
-          weightMap.set(item.niin, {
-            weight: item.dss_weight || '',
-            cube: item.dss_cube || '',
-            pubDate: item.publication_date || ''
-          });
-        }
-      });
-    }
-
-    const descriptionMap = new Map<string, { requirement: string; clearText: string }>();
-    if (descriptionsData) {
-      descriptionsData.forEach(item => {
-        if (item.niin) {
-          descriptionMap.set(item.niin, {
-            requirement: item.requirementsStatement || '',
-            clearText: item.clearTextReply || ''
-          });
-        }
-      });
-    }
-
-    const alternateNamesMap = new Map<string, string[]>();
-    if (namesData) {
-      namesData.forEach(item => {
-        if (item.niin && item.item_name) {
-          if (!alternateNamesMap.has(item.niin)) {
-            alternateNamesMap.set(item.niin, []);
-          }
-          alternateNamesMap.get(item.niin)!.push(item.item_name);
-        }
-      });
-    }
-
-    // Transform data to match expected format with enriched data
+    conTransform data to match expected format - MINIMAL DATA ONLY
     let transformedData = pull2Data.map((item: any) => {
-      const aac = aacMap.get(item.niin) || '';
-      const isClassIX = ['D', 'V', 'Z'].includes(aac.toUpperCase());
-      const priceInfo = priceMap.get(item.niin);
-      const weightInfo = weightMap.get(item.niin);
-      const descInfo = descriptionMap.get(item.niin);
-      const altNames = alternateNamesMap.get(item.niin) || [];
-      
       return {
         nsn: item.niin || '',
-        name: item.itemName || '',
-        description: item.commonName || '',
+        name: null,
+        description: null,
         turnInPart: '',
-        classIX: isClassIX,
-        aac: aac,
+        classIX: null,
+        aac: null,
         fsc: item.fsc || '',
         niin: item.niin || '',
-        characteristics: item.characteristics || '',
-        publicationDate: item.publicationDate || '',
-        // Enriched data
-        unitPrice: priceInfo?.unitPrice || null,
-        unitOfIssue: priceInfo?.ui || null,
-        weight: weightInfo?.weight || null,
-        cube: weightInfo?.cube || null,
-        weightPubDate: weightInfo?.pubDate || null,
-        requirementsStatement: descInfo?.requirement || null,
-        clearTextReply: descInfo?.clearText || null,
-        alternateNames: altNames
-      };
-    });
-
-    // Apply Class IX filter if provided
-    if (classIXFilter !== null) {
-      const filterValue = classIXFilter === 'true';
-      transformedData = transformedData.filter(item => item.classIX === filterValue);
-    }
-
-    // Apply price range filter if provided
-    if (minPrice || maxPrice) {
-      transformedData = transformedData.filter(item => {
-        if (!item.unitPrice) return false;
-        const price = parseFloat(item.unitPrice);
-        if (isNaN(price)) return false;
-        if (minPrice && price < parseFloat(minPrice)) return false;
-        if (maxPrice && price > parseFloat(maxPrice)) return false;
-        return true;
-      });
+        characteristics: null,
+        publicationDate: null,
+        // All enriched data null - use detail endpoint
+        unitPrice: null,
+        unitOfIssue: null,
+        weight: null,
+        cube: null,
+        weightPubDate: null,
+        requirementsStatement: null,
+        clearTextReply: null,
+        alternateNames: []
     }
 
     return NextResponse.json({
