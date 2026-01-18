@@ -26,11 +26,11 @@ export default auth(async (req) => {
     try {
       const { data: user } = await supabaseAdmin
         .from('users')
-        .select('subscription_status')
+        .select('stripe_subscription_status')
         .eq('email', session.user.email)
         .single();
       
-      const hasActiveSubscription = user?.subscription_status === 'active';
+      const hasActiveSubscription = user?.stripe_subscription_status === 'active';
       
       // If user doesn't have active subscription, redirect to pricing
       if (!hasActiveSubscription && !isPublicRoute) {
@@ -51,11 +51,12 @@ export const config = {
     /*
      * Match all request paths except for the ones starting with:
      * - api/auth (NextAuth routes)
+     * - api/webhooks (Stripe webhooks)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - static assets
      */
-    '/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api/auth|api/webhooks|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
