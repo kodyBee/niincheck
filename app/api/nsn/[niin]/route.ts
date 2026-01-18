@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/db';
 
 export async function GET(
   request: Request,
-  { params }: { params: { niin: string } }
+  { params }: { params: Promise<{ niin: string }> }
 ) {
   try {
     const session = await auth();
@@ -16,7 +16,7 @@ export async function GET(
       );
     }
 
-    const { niin } = params;
+    const { niin } = await params;
 
     if (!niin) {
       return NextResponse.json(
