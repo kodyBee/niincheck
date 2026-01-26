@@ -38,7 +38,7 @@ export default function HomePage() {
               
               <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
                 Instantly search millions of National Stock Number records.
-                Keep commonly used NSN's in your inventory for quick access. 
+                Keep commonly used NSNs in your inventory for quick access. 
               </p>
 
               
@@ -85,7 +85,7 @@ export default function HomePage() {
                 Engineered for Performance
               </h2>
               <p className="text-lg text-muted-foreground">
-                We've rebuilt the NSN search experience from the ground up to be faster, deeper, and more intuitive.
+                We&apos;ve rebuilt the NSN search experience from the ground up to be faster, deeper, and more intuitive.
               </p>
             </div>
 

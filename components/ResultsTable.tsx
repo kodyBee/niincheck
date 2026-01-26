@@ -149,7 +149,7 @@ export function ResultsTable({ results, isLoading, onRemove }: ResultsTableProps
                         <span className="cursor-help decoration-dotted underline decoration-muted-foreground/30 underline-offset-4">Class IX</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">Class IX includes repair parts and components required for maintenance support of all equipment. In general, Class IX items have an AAC code of D, V, or Z. There are exceptions, so don't be afraid to double check with supply.</p>
+                        <p className="max-w-xs">Class IX includes repair parts and components required for maintenance support of all equipment. In general, Class IX items have an AAC code of D, V, or Z. There are exceptions, so don&apos;t be afraid to double check with supply.</p>
                       </TooltipContent>
                     </Tooltip>
                   </TableHead>
