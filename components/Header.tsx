@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Database } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Database, Menu } from "lucide-react";
 
 export function Header() {
   return (
@@ -12,7 +13,7 @@ export function Header() {
             NSN Database
           </span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="hidden md:flex items-center gap-2">
           <Button variant="ghost" asChild>
             <Link href="/pricing">Pricing</Link>
           </Button>
@@ -25,6 +26,38 @@ export function Header() {
           <Button asChild>
             <Link href="/signup">Sign Up</Link>
           </Button>
+        </div>
+
+        {/* Mobile Menu */}
+        <div className="md:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-6 w-6" />
+                <span className="sr-only">Toggle menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right">
+              <SheetTitle>Menu</SheetTitle>
+              <SheetDescription>
+                 Navigate through the application
+              </SheetDescription>
+              <div className="flex flex-col gap-4 mt-8">
+                <Link href="/pricing" className="text-lg font-medium hover:text-primary transition-colors">
+                  Pricing
+                </Link>
+                <Link href="/dashboard" className="text-lg font-medium hover:text-primary transition-colors">
+                  Dashboard
+                </Link>
+                <Link href="/login" className="text-lg font-medium hover:text-primary transition-colors">
+                  Login
+                </Link>
+                <Button asChild className="w-full">
+                  <Link href="/signup">Sign Up</Link>
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </nav>
     </header>

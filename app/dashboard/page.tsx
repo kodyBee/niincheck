@@ -10,10 +10,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Database, LogOut, User, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Database, LogOut, User, CheckCircle2, Loader2, AlertCircle, Settings, CreditCard, List } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { SearchHistory } from "@/components/SearchHistory";
+import { InventoryList } from "@/components/InventoryList";
 
 interface NSNResult {
   nsn: string;
@@ -23,6 +25,8 @@ interface NSNResult {
   classIX: boolean;
   fsc: string;
   niin: string;
+  unitPrice?: string;
+  unitOfIssue?: string;
 }
 
 export default function DashboardPage() {
@@ -137,6 +141,15 @@ export default function DashboardPage() {
     } finally {
       setSearchLoading(false);
     }
+
+    // Save history in background
+    if (query.trim()) {
+       fetch("/api/history", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ query: query.trim() }),
+       }).catch(err => console.error("Failed to save history", err));
+    }
   };
 
   const handleLogout = async () => {
@@ -145,7 +158,7 @@ export default function DashboardPage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -154,13 +167,19 @@ export default function DashboardPage() {
   const userInitials = session?.user?.email?.slice(0, 2).toUpperCase() || "UN";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Background Pattern */}
+      <div className="fixed inset-0 z-[-1] bg-background">
+        <div className="absolute inset-0 bg-grid-black/[0.02] dark:bg-grid-white/[0.02]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-secondary/20" />
+      </div>
+
       {/* Success Message */}
       {showSuccessMessage && (
-        <Alert className="fixed top-4 right-4 z-50 max-w-md animate-in slide-in-from-right border-green-500 bg-green-50">
-          <CheckCircle2 className="h-5 w-5 text-green-600" />
-          <AlertTitle className="text-green-900">Success!</AlertTitle>
-          <AlertDescription className="text-green-800">
+        <Alert className="fixed top-4 right-4 z-50 max-w-md animate-in slide-in-from-right border-emerald-500 bg-emerald-50 dark:bg-emerald-950/50">
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <AlertTitle className="text-emerald-900 dark:text-emerald-100">Success!</AlertTitle>
+          <AlertDescription className="text-emerald-800 dark:text-emerald-200">
             Subscription activated successfully!
           </AlertDescription>
         </Alert>
@@ -169,7 +188,7 @@ export default function DashboardPage() {
       {/* Loading Overlay */}
       {verifyingSubscription && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 flex items-center justify-center">
-          <Card>
+          <Card className="border-border/50 shadow-xl">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -181,25 +200,26 @@ export default function DashboardPage() {
       )}
       
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <nav className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 group hover:opacity-80 transition-opacity">
             <Database className="h-6 w-6 text-primary" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              NSN Database
+            <span className="text-xl font-bold tracking-tight">
+              NSN<span className="text-primary">log</span>
             </span>
-          </div>
+          </Link>
           <div className="flex items-center gap-4">
+             {/* Add additional nav items here if needed */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full ring-2 ring-primary/10 hover:ring-primary/20 transition-all">
                   <Avatar>
-                    <AvatarFallback>{userInitials}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/10 text-primary">{userInitials}</AvatarFallback>
                   </Avatar>
                   {!session?.user?.isSubscribed && (
                     <Badge 
                       variant="destructive" 
-                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                      className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs animate-pulse"
                     >
                       !
                     </Badge>
@@ -211,11 +231,13 @@ export default function DashboardPage() {
                   <div className="flex flex-col space-y-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium leading-none">Account</p>
-                      {!session?.user?.isSubscribed && (
-                        <Badge variant="destructive" className="text-xs">Inactive</Badge>
+                      {!session?.user?.isSubscribed ? (
+                         <Badge variant="destructive" className="text-[10px] h-5 px-1.5">Free Plan</Badge>
+                      ) : (
+                         <Badge variant="default" className="text-[10px] h-5 px-1.5 bg-emerald-500 hover:bg-emerald-600">Pro</Badge>
                       )}
                     </div>
-                    <p className="text-xs leading-none text-muted-foreground">
+                    <p className="text-xs leading-none text-muted-foreground truncate">
                       {session?.user?.email}
                     </p>
                   </div>
@@ -224,55 +246,80 @@ export default function DashboardPage() {
                 {!session?.user?.isSubscribed && (
                   <>
                     <DropdownMenuItem asChild>
-                      <Link href="/pricing" className="cursor-pointer">
-                        <AlertCircle className="mr-2 h-4 w-4" />
-                        Subscribe Now
+                      <Link href="/pricing" className="cursor-pointer text-primary focus:text-primary">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Upgrade to Pro
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
-                <DropdownMenuItem>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </nav>
-      </header>
+                  <DropdownMenuItem asChild>
+                     <Link href="/inventory" className="cursor-pointer">
+                      <List className="mr-2 h-4 w-4" />
+                      My Inventory
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                     <Link href="/profile" className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      Profile Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </nav>
+        </header>
 
       {/* Main Content */}
-      <main className="container py-12">
+      <main className="container py-8 md:py-12 flex-1">
         <div className="max-w-6xl mx-auto space-y-8">
-          <div className="text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Search NSN Database
-            </h1>
-            <p className="text-xl text-muted-foreground">
-              Search through millions of National Stock Numbers
-            </p>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+             <div>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                  Search Database
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Access over 10 million active NSN records
+                </p>
+             </div>
+             {!session?.user?.isSubscribed && (
+                <Button asChild size="sm" variant="outline" className="hidden md:flex">
+                  <Link href="/pricing">View Plans</Link>
+                </Button>
+             )}
           </div>
 
-          <SearchBar 
-            onSearch={handleSearch} 
-            isSubscribed={session?.user?.isSubscribed}
-          />
+          <div className="bg-card/50 backdrop-blur-sm p-6 rounded-2xl border shadow-sm">
+             <SearchBar 
+              onSearch={handleSearch} 
+              isSubscribed={session?.user?.isSubscribed}
+            />
+          </div>
 
-          {searchQuery && (
-            <div>
-              <h3 className="text-2xl font-semibold mb-4">
-                Results for <span className="text-primary">&quot;{searchQuery}&quot;</span>
-              </h3>
-            </div>
-          )}
+          <div className="grid md:grid-cols-1 gap-6">
+            <SearchHistory onSearch={(q) => handleSearch(q)} />
+          </div>
 
-          <ResultsTable results={results} isLoading={searchLoading} />
+          <div className="space-y-4">
+             {searchQuery && (
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">
+                  Results for <span className="text-primary">&quot;{searchQuery}&quot;</span>
+                </h3>
+                <span className="text-sm text-muted-foreground">
+                   {results.length > 0 ? `${results.length} found` : "No results"}
+                </span>
+              </div>
+            )}
+             <ResultsTable results={results} isLoading={searchLoading} />
+          </div>
         </div>
       </main>
     </div>

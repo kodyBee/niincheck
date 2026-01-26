@@ -22,84 +22,214 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    if (!query || query.length < 2) {
+    if (!query) {
+      return NextResponse.json({ results: [], total: 0, page, limit });
+    }
+
+    // Clean query: remove dashes and whitespace, convert to uppercase
+    const cleanQuery = query.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+    // Strict NSN/Part Number search check
+    if (cleanQuery.length < 3) {
       return NextResponse.json({ results: [], total: 0, page, limit });
     }
 
     // Calculate offset for pagination
     const offset = (page - 1) * limit;
 
-    // Optimized search query utilizing DB indexes and Joins
-    // Join pull2 -> items -> (prices, aacs)
-    let dbQuery = supabaseAdmin
-      .from('pull2')
-      .select('*, items!inner(prices(unitPrice), aacs(aac))', { count: 'exact' })
-      .range(offset, offset + limit - 1);
+    const isNumeric = /^\d+$/.test(cleanQuery);
 
-    // Apply smart search filters
-    const cleanQuery = query.trim().toUpperCase();
+    // Determine the search term for NIIN columns
+    let niinSearchTerm = cleanQuery;
+    let isFullNsn = false;
+    let fscFromInput = '';
 
-    if (/^[\d-]+$/.test(cleanQuery)) {
-      const cleanNiin = cleanQuery.replace(/-/g, '');
-      dbQuery = dbQuery.or(`niin.ilike.${cleanNiin}%,fsc.eq.${cleanQuery}`);
-    } else {
-      // Relies on pg_trgm GIN index
-      dbQuery = dbQuery.or(`itemName.ilike.%${cleanQuery}%,fsc.eq.${cleanQuery}`);
+    // Logic: 
+    // If input is a full NSN (13 digits) or longer than 9 digits and numeric, 
+    // extract NIIN (last 9) and FSC (first 4 if available).
+    if (isNumeric && cleanQuery.length >= 9) {
+      if (cleanQuery.length >= 13) {
+        isFullNsn = true;
+        fscFromInput = cleanQuery.substring(0, 4);
+      }
+      niinSearchTerm = cleanQuery.slice(-9);
     }
 
-    // Apply FSC filter
-    if (fscFilter) {
-      dbQuery = dbQuery.eq('fsc', fscFilter);
-    }
+    // === HYBRID STRATEGY ===
 
-    const { data: pull2Data, error, count } = await dbQuery;
+    // PATH A: EXACT MATCH (Fast Path)
+    // If we have a full 9-digit NIIN, we do direct lookups.
+    if (isNumeric && niinSearchTerm.length === 9) {
+      // Parallel fetch from all optimized tables
+      const [namesRes, weightsRes, pricesRes, aacsRes, pull2Res] = await Promise.all([
+        supabaseAdmin.from('names').select('*').eq('niin', niinSearchTerm).limit(1),
+        supabaseAdmin.from('weights').select('*').eq('niin', niinSearchTerm).limit(1),
+        supabaseAdmin.from('prices').select('*').eq('niin', niinSearchTerm).limit(1),
+        supabaseAdmin.from('aacs').select('*').eq('niin', niinSearchTerm).limit(1),
+        supabaseAdmin.from('pull2').select('*').eq('niin', niinSearchTerm).limit(1)
+      ]);
 
-    if (error) {
-      console.error('Search error:', error);
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
+      // If we found nothing in 'names' or 'pull2', it might handle as no result, 
+      // but if we found it in ANY table, we construct the result.
+      const hasResult = namesRes.data?.length || weightsRes.data?.length || pricesRes.data?.length || aacsRes.data?.length || pull2Res.data?.length;
 
-    if (!pull2Data || pull2Data.length === 0) {
-      return NextResponse.json({ results: [], total: 0, page, limit });
-    }
+      if (!hasResult) {
+        return NextResponse.json({ results: [], total: 0, page, limit });
+      }
 
-    // Transform data
-    let transformedData = pull2Data.map((item: any) => {
-      // items is likely a single object because pull2.niin -> items.niin is Many-to-One
-      const relatedItems = item.items;
+      const p2 = pull2Res.data?.[0] || {};
+      const nameData = namesRes.data?.[0] || {};
+      const weightData = weightsRes.data?.[0] || {};
+      const priceData = pricesRes.data?.[0] || {};
+      const aacData = aacsRes.data?.[0] || {};
 
-      // prices and aacs are arrays within relatedItems
-      const prices = relatedItems?.prices || [];
-      const aacs = relatedItems?.aacs || [];
-
-      // Get first matching price/aac if available
-      const priceObj = prices.find((p: any) => p.unitPrice) || {};
-      const aacObj = aacs.find((a: any) => a.aac) || {};
-
-      const aac = aacObj.aac || '';
+      const aac = aacData.aac || '';
       const isClassIX = ['D', 'V', 'Z'].includes(aac.toUpperCase());
-      const unitPrice = priceObj.unitPrice;
+      const fsc = nameData.fsc || p2.fsc || fscFromInput || '';
 
-      return {
-        nsn: item.niin || '',
-        name: item.itemName || '',
-        description: null,
+      const result = {
+        nsn: fsc ? `${fsc}${niinSearchTerm}` : niinSearchTerm,
+        niin: niinSearchTerm,
+        name: nameData.item_name || p2.itemName || 'Unknown Item',
+        description: nameData.common_name || p2.commonName || null,
         turnInPart: '',
         classIX: isClassIX,
         aac: aac,
-        fsc: item.fsc || '',
-        niin: item.niin || '',
-        characteristics: null,
-        publicationDate: null,
-        // Essential data
-        unitPrice: unitPrice || null,
-        unitOfIssue: null,
-        // Other data null - use detail endpoint
-        weight: null,
-        cube: null,
+        fsc: fsc,
+        characteristics: nameData.characteristics || p2.characteristics || null,
+        publicationDate: weightData.publication_date || p2.publicationDate || null,
+
+        // Price data
+        unitPrice: priceData.unitPrice || null,
+        unitOfIssue: priceData.ui || null,
+
+        // Weight data
+        weight: weightData.dss_weight || null,
+        cube: weightData.dss_cube || null,
+        weightPubDate: null,
+        requirementsStatement: null,
+        clearTextReply: null,
+        alternateNames: []
+      };
+
+      // Apply single-item filters
+      let results = [result];
+      if (classIXFilter !== null && classIXFilter !== undefined && classIXFilter !== 'all') {
+        const filterValue = classIXFilter === 'true';
+        if ((isClassIX) !== filterValue) results = [];
+      }
+
+      // We return immediately for exact match
+      return NextResponse.json({
+        results,
+        total: results.length,
+        page,
+        limit,
+        totalPages: 1
+      });
+    }
+
+    // PATH B: PARTIAL SEARCH (Discovery Path)
+    // For partial matches, we search `names` and `prices` and `pull2` for candidates.
+    // We prioritize `names` as it's likely smaller and faster than `pull2` for text/niin prefix.
+
+    const searchLimit = limit * 2;
+    const searchPromises = [];
+
+    // Query 1: Names table (Fast text/NIIN)
+    let namesQuery = supabaseAdmin.from('names').select('niin').limit(searchLimit);
+    if (isNumeric) {
+      namesQuery = namesQuery.ilike('niin', `${niinSearchTerm}%`);
+    } else {
+      // Optional: search item_name if we wanted text search back, but user said no.
+      // We'll stick to NIIN only for now as requested.
+      namesQuery = namesQuery.ilike('niin', `${cleanQuery}%`);
+    }
+    searchPromises.push(namesQuery);
+
+    // Query 2: Prices table
+    let pricesQuery = supabaseAdmin.from('prices').select('niin').ilike('niin', `${niinSearchTerm}%`).limit(searchLimit);
+    searchPromises.push(pricesQuery);
+
+    // Query 3: Pull2 table (Legacy/Main)
+    let pull2Query = supabaseAdmin.from('pull2').select('niin').limit(searchLimit);
+    if (isNumeric) {
+      pull2Query = pull2Query.or(`niin.ilike.${niinSearchTerm}%,fsc.eq.${cleanQuery}`);
+    } else {
+      pull2Query = pull2Query.ilike('niin', `${cleanQuery}%`);
+    }
+    if (fscFilter) pull2Query = pull2Query.eq('fsc', fscFilter);
+    searchPromises.push(pull2Query);
+
+    // Execute parallel searches
+    const [namesRes, pricesRes, pull2Res] = await Promise.all(searchPromises);
+
+    // Collect all matched NIINs
+    const allNiins = new Set<string>();
+    namesRes.data?.forEach((r: any) => r.niin && allNiins.add(r.niin));
+    pricesRes.data?.forEach((r: any) => r.niin && allNiins.add(r.niin));
+    pull2Res.data?.forEach((r: any) => r.niin && allNiins.add(r.niin));
+
+    const totalUnique = allNiins.size;
+    if (totalUnique === 0) {
+      return NextResponse.json({ results: [], total: 0, page, limit });
+    }
+
+    // Pagination
+    const sortedNiins = Array.from(allNiins).sort();
+    const paginatedNiins = sortedNiins.slice(offset, offset + limit);
+
+    if (paginatedNiins.length === 0) {
+      return NextResponse.json({ results: [], total: totalUnique, page, limit, totalPages: Math.ceil(totalUnique / limit) });
+    }
+
+    // Fetch details for aggregated NIINs
+    const detailsPromises = [
+      supabaseAdmin.from('names').select('*').in('niin', paginatedNiins),
+      supabaseAdmin.from('weights').select('*').in('niin', paginatedNiins),
+      supabaseAdmin.from('prices').select('*').in('niin', paginatedNiins),
+      supabaseAdmin.from('aacs').select('*').in('niin', paginatedNiins),
+      supabaseAdmin.from('pull2').select('*').in('niin', paginatedNiins)
+    ];
+
+    const [dNames, dWeights, dPrices, dAacs, dPull2] = await Promise.all(detailsPromises);
+
+    // Map details
+    const namesMap = new Map(dNames.data?.map((i: any) => [i.niin, i]));
+    const weightsMap = new Map(dWeights.data?.map((i: any) => [i.niin, i]));
+    const pricesMap = new Map(dPrices.data?.map((i: any) => [i.niin, i]));
+    const aacsMap = new Map(dAacs.data?.map((i: any) => [i.niin, i]));
+    const pull2Map = new Map(dPull2.data?.map((i: any) => [i.niin, i]));
+
+    // Construct results
+    let transformedData = paginatedNiins.map(niin => {
+      const p2 = pull2Map.get(niin) || {};
+      const nameD = namesMap.get(niin) || {};
+      const weightD = weightsMap.get(niin) || {};
+      const priceD = pricesMap.get(niin) || {};
+      const aacD = aacsMap.get(niin) || {};
+
+      const aac = aacD.aac || '';
+      const isClassIX = ['D', 'V', 'Z'].includes(aac.toUpperCase());
+      const fsc = nameD.fsc || p2.fsc || (niin === niinSearchTerm ? fscFromInput : '');
+
+      return {
+        nsn: fsc ? `${fsc}${niin}` : niin,
+        niin: niin,
+        name: nameD.item_name || p2.itemName || 'Unknown Item',
+        description: nameD.common_name || p2.commonName || null,
+        turnInPart: '',
+        classIX: isClassIX,
+        aac: aac,
+        fsc: fsc,
+        characteristics: nameD.characteristics || p2.characteristics || null,
+        publicationDate: weightD.publication_date || p2.publicationDate || null,
+
+        unitPrice: priceD.unitPrice || null,
+        unitOfIssue: priceD.ui || null,
+
+        weight: weightD.dss_weight || null,
+        cube: weightD.dss_cube || null,
         weightPubDate: null,
         requirementsStatement: null,
         clearTextReply: null,
@@ -107,31 +237,31 @@ export async function GET(request: Request) {
       };
     });
 
-    // Apply Class IX filter if provided
-    if (classIXFilter !== null) {
+    // Apply Post-aggregation filters
+    if (classIXFilter !== null && classIXFilter !== undefined && classIXFilter !== 'all') {
       const filterValue = classIXFilter === 'true';
       transformedData = transformedData.filter(item => item.classIX === filterValue);
     }
 
-    // Apply price range filter if provided
     if (minPrice || maxPrice) {
       transformedData = transformedData.filter(item => {
         if (!item.unitPrice) return false;
-        const price = parseFloat(item.unitPrice);
-        if (isNaN(price)) return false;
-        if (minPrice && price < parseFloat(minPrice)) return false;
-        if (maxPrice && price > parseFloat(maxPrice)) return false;
+        const p = parseFloat(item.unitPrice);
+        if (isNaN(p)) return false;
+        if (minPrice && p < parseFloat(minPrice)) return false;
+        if (maxPrice && p > parseFloat(maxPrice)) return false;
         return true;
       });
     }
 
     return NextResponse.json({
       results: transformedData,
-      total: count || 0,
+      total: totalUnique,
       page,
       limit,
-      totalPages: Math.ceil((count || 0) / limit)
+      totalPages: Math.ceil(totalUnique / limit)
     });
+
   } catch (error) {
     console.error('Search error:', error);
     return NextResponse.json(

@@ -9,33 +9,29 @@ const supabase = createClient(
 async function inspectDatabase() {
   console.log('=== Your Supabase Database Structure ===\n');
   
-  // Check items table structure
-  console.log('Table: items');
-  const { data: itemsData } = await supabase
-    .from('items')
-    .select('*')
-    .limit(0);
-  
-  // Check customers table  
-  console.log('\nTable: customers');
-  const { data: customersData, error: custError } = await supabase
-    .from('customers')
-    .select('*')
-    .limit(1);
-  
-  if (customersData && customersData.length > 0) {
-    console.log('Columns:', Object.keys(customersData[0]).join(', '));
-    console.log('\nSample record:', JSON.stringify(customersData[0], null, 2));
-  } else if (!custError) {
-    console.log('Table exists but is empty');
-  }
-  
-  // Get table info from Supabase API
-  console.log('\n\nPlease tell me:');
-  console.log('1. What columns does your "items" table have?');
-  console.log('   (e.g., nsn, name, description, part_number, etc.)');
-  console.log('\n2. What columns does your "customers" table have?');
-  console.log('   (e.g., user_id, stripe_customer_id, subscription_status, etc.)');
+  // Check names
+  console.log('--- Table: names ---');
+  const { data: names, error: errNames } = await supabase.from('names').select('*').limit(1);
+  if (names && names.length) console.log(Object.keys(names[0]));
+  else console.log('Empty or Error:', errNames?.message);
+
+  // Check weights
+  console.log('--- Table: weights ---');
+  const { data: weights, error: errWeights } = await supabase.from('weights').select('*').limit(1);
+  if (weights && weights.length) console.log(Object.keys(weights[0]));
+  else console.log('Empty or Error:', errWeights?.message);
+
+  // Check prices
+  console.log('\n--- Table: prices ---');
+  const { data: prices, error: err3 } = await supabase.from('prices').select('*').limit(1);
+  if (prices && prices.length) console.log(Object.keys(prices[0]));
+  else console.log('Empty or Error:', err3?.message);
+
+  // Check aacs
+  console.log('\n--- Table: aacs ---');
+  const { data: aacs, error: err4 } = await supabase.from('aacs').select('*').limit(1);
+  if (aacs && aacs.length) console.log(Object.keys(aacs[0]));
+  else console.log('Empty or Error:', err4?.message);
 }
 
 inspectDatabase().catch(err => {

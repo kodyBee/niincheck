@@ -61,14 +61,20 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Background Pattern */}
+      <div className="fixed inset-0 z-[-1] bg-background">
+         <div className="absolute inset-0 bg-grid-black/[0.02] dark:bg-grid-white/[0.02]" />
+         <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 via-background to-secondary/20" />
+      </div>
+
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 group hover:opacity-80 transition-opacity">
             <Database className="h-6 w-6 text-primary" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              NSN Database
+            <span className="text-xl font-bold tracking-tight">
+              NSN<span className="text-primary">log</span>
             </span>
           </Link>
           <nav className="flex items-center gap-2">
@@ -77,7 +83,7 @@ export default function PricingPage() {
                 <Button variant="ghost" asChild>
                   <Link href="/login">Login</Link>
                 </Button>
-                <Button asChild>
+                <Button asChild className="shadow-lg shadow-primary/20">
                   <Link href="/signup">Sign Up</Link>
                 </Button>
               </>
@@ -91,20 +97,20 @@ export default function PricingPage() {
       </header>
 
       {/* Main Content */}
-      <main className="container py-12 md:py-20">
+      <main className="container py-12 md:py-20 flex-1">
         <div className="max-w-6xl mx-auto space-y-12">
           {isLoggedIn && (
-            <Alert className="border-yellow-500 bg-yellow-50">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              <AlertTitle className="text-yellow-900">Subscription Required</AlertTitle>
-              <AlertDescription className="text-yellow-800">
+            <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
+              <AlertTitle className="text-yellow-900 dark:text-yellow-200">Subscription Required</AlertTitle>
+              <AlertDescription className="text-yellow-800 dark:text-yellow-300">
                 You need an active subscription to access the NSN database. Choose a plan below to get started.
               </AlertDescription>
             </Alert>
           )}
           
           <div className="text-center space-y-4">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight">
               Simple, Transparent Pricing
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
@@ -126,7 +132,7 @@ export default function PricingPage() {
 
           {/* FAQ Section */}
           <div className="max-w-3xl mx-auto space-y-8">
-            <h2 className="text-3xl font-bold text-center">
+            <h2 className="text-3xl font-bold text-center tracking-tight">
               Frequently Asked Questions
             </h2>
             <Accordion type="single" collapsible className="w-full">

@@ -26,7 +26,7 @@ interface SearchBarProps {
   isSubscribed?: boolean;
 }
 
-export function SearchBar({ onSearch, placeholder = "Search NSN database...", isSubscribed = false }: SearchBarProps) {
+export function SearchBar({ onSearch, placeholder = "Complete NSN required", isSubscribed = false }: SearchBarProps) {
   const [query, setQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
@@ -110,14 +110,14 @@ export function SearchBar({ onSearch, placeholder = "Search NSN database...", is
             <div>
               <label className="text-sm font-medium mb-2 block">Class IX</label>
               <Select
-                value={filters.classIX || ''}
-                onValueChange={(value) => setFilters({ ...filters, classIX: value })}
+                value={filters.classIX || 'all'}
+                onValueChange={(value) => setFilters({ ...filters, classIX: value === 'all' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Any" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Any</SelectItem>
+                  <SelectItem value="all">Any</SelectItem>
                   <SelectItem value="true">Yes</SelectItem>
                   <SelectItem value="false">No</SelectItem>
                 </SelectContent>
