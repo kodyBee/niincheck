@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Shield, RefreshCw, ArrowRight, CheckCircle2, Zap } from "lucide-react";
+import { Search, Shield, RefreshCw, CheckCircle2, Zap } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { HeroSearch } from "@/components/HeroSearch";
+import { HeroActions } from "@/components/HeroActions";
 
 export default function HomePage() {
   return (
@@ -43,19 +44,7 @@ export default function HomePage() {
 
               
 
-              <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md justify-center animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
-                <Button variant="outline" size="lg" asChild className="text-lg h-12">
-                  <Link href="/pricing">
-                    View Pricing
-                  </Link>
-                </Button>
-                <Button size="lg" asChild className="text-lg h-12 shadow-xl shadow-primary/20 hover:shadow-primary/30 transition-all">
-                  <Link href="/signup">
-                    Get Started
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-              </div>
+              <HeroActions />
 
               {/* Verified Stats */}
               <div className="grid grid-cols-3 gap-8 md:gap-16 mt-20 pt-10 border-t border-border/50 animate-in fade-in duration-1000 delay-500 w-full">
